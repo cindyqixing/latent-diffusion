@@ -50,7 +50,7 @@ def generate(event: v1.Event) -> None:
     with DaprClient() as d:
         id = data["id"]
         req = json.loads(d.get_state(store_name="cosmosdb", key=id).data)
-        if req["complete_time"]:
+        if req == null or req["complete_time"]:
           return
         req["start_time"] = datetime.utcnow()
         d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
