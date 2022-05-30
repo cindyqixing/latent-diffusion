@@ -48,7 +48,7 @@ def generate(event: v1.Event) -> None:
     data = json.loads(event.Data())
     with DaprClient() as d:
         id = data["id"]
-        req = d.get_state(store_name="cosmosdb", key=id).data
+        req = json.loads(d.get_state(store_name="cosmosdb", key=id).data)
         if req["complete_time"]:
           return
         opt = SimpleNamespace(**data["input"])
