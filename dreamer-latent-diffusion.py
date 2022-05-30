@@ -48,6 +48,9 @@ def generate(event: v1.Event) -> None:
     data = json.loads(event.Data())
     with DaprClient() as d:
         id = data["id"]
+        req = d.get_state(store_name="cosmosdb", key=id).data
+        if data.complete_time:
+          return
         opt = SimpleNamespace(**data["input"])
         opt.outdir = os.path.join("/var/www/html/result/", id)
 
