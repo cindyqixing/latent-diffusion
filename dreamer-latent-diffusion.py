@@ -129,7 +129,5 @@ def generate(event: v1.Event) -> None:
             data_content_type="application/json")
 
         req.complete_time = datetime.utcnow()
-        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req)) 
-#        return InvokeMethodResponse(json.dumps(sample_filenames))
-                    
+        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
 app.run(50052)
