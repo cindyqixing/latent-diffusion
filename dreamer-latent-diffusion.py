@@ -6,6 +6,7 @@ from PIL import Image
 from tqdm import tqdm, trange
 from einops import rearrange
 from torchvision.utils import make_grid
+from datetime import datetime
 
 from ldm.util import instantiate_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
@@ -51,6 +52,8 @@ def generate(event: v1.Event) -> None:
         req = json.loads(d.get_state(store_name="cosmosdb", key=id).data)
         if req["complete_time"]:
           return
+        req["start_time"] = datetime.utcnow()
+        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
         opt = SimpleNamespace(**data["input"])
         opt.outdir = os.path.join("/var/www/html/result/", id)
 
@@ -125,6 +128,8 @@ def generate(event: v1.Event) -> None:
                 "images": sample_filenames}),
             data_content_type="application/json")
 
+        req.complete_time = datetime.utcnow()
+        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req)) 
 #        return InvokeMethodResponse(json.dumps(sample_filenames))
                     
 app.run(50052)
