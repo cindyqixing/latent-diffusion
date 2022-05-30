@@ -75,61 +75,70 @@ def generate(event: v1.Event) -> None:
         os.makedirs(sample_path, exist_ok=True)
         base_count = len(os.listdir(sample_path))
 
-        client = Minio("dumb.dev", access_key=os.getenv('NIGHTMAREBOT_MINIO_KEY'), secret_key=os.getenv('NIGHTMAREBOT_MINIO_SECRET'))
-        sample_filenames=list()
-        all_samples=list()
-        with torch.no_grad():
-            with model.ema_scope():
-                uc = None
-                if opt.scale != 1.0:
-                    uc = model.get_learned_conditioning(opt.n_samples * [""])
-                for n in trange(opt.n_iter, desc="Sampling"):
-                    c = model.get_learned_conditioning(opt.n_samples * [prompt])
-                    shape = [4, opt.height//8, opt.width//8]
-                    samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                    conditioning=c,
-                                                    batch_size=opt.n_samples,
-                                                    shape=shape,
-                                                    verbose=False,
-                                                    unconditional_guidance_scale=opt.scale,
-                                                    unconditional_conditioning=uc,
-                                                    eta=opt.ddim_eta)
+        try:
+          client = Minio("dumb.dev", access_key=os.getenv('NIGHTMAREBOT_MINIO_KEY'), secret_key=os.getenv('NIGHTMAREBOT_MINIO_SECRET'))
+          sample_filenames=list()
+          all_samples=list()
+          with torch.no_grad():
+              with model.ema_scope():
+                  uc = None
+                  if opt.scale != 1.0:
+                      uc = model.get_learned_conditioning(opt.n_samples * [""])
+                  for n in trange(opt.n_iter, desc="Sampling"):
+                      c = model.get_learned_conditioning(opt.n_samples * [prompt])
+                      shape = [4, opt.height//8, opt.width//8]
+                      samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                      conditioning=c,
+                                                      batch_size=opt.n_samples,
+                                                      shape=shape,
+                                                      verbose=False,
+                                                      unconditional_guidance_scale=opt.scale,
+                                                      unconditional_conditioning=uc,
+                                                      eta=opt.ddim_eta)
+  
+                      x_samples_ddim = model.decode_first_stage(samples_ddim)
+                      x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
+  
+                      for x_sample in x_samples_ddim:
+                          x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                          basename = f"{base_count:04}.png"
+                          sample_filenames.append(basename)
+                          filename = os.path.join(sample_path, basename)
+                          Image.fromarray(x_sample.astype(np.uint8)).save(filename)
+                          client.fput_object("nightmarebot-output", f"{id}/samples/{base_count:04}.png",filename, content_type="image/png")
+                          base_count += 1
+                      all_samples.append(x_samples_ddim)
+          # additionally, save as grid
+          grid = torch.stack(all_samples, 0)
+          grid = rearrange(grid, 'n b c h w -> (n b) c h w')
+          grid = make_grid(grid, nrow=opt.n_samples)
 
-                    x_samples_ddim = model.decode_first_stage(samples_ddim)
-                    x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
-
-                    for x_sample in x_samples_ddim:
-                        x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                        basename = f"{base_count:04}.png"
-                        sample_filenames.append(basename)
-                        filename = os.path.join(sample_path, basename)
-                        Image.fromarray(x_sample.astype(np.uint8)).save(filename)
-                        client.fput_object("nightmarebot-output", f"{id}/samples/{base_count:04}.png",filename, content_type="image/png")
-                        base_count += 1
-                    all_samples.append(x_samples_ddim)
-
-
-        # additionally, save as grid
-        grid = torch.stack(all_samples, 0)
-        grid = rearrange(grid, 'n b c h w -> (n b) c h w')
-        grid = make_grid(grid, nrow=opt.n_samples)
-
-        # to image
-        grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-        gridFilename = os.path.join(outpath, f'results.png')
-        Image.fromarray(grid.astype(np.uint8)).save(gridFilename)
-        client.fput_object("nightmarebot-output", f"{id}/results.png", gridFilename, content_type="image/png")
-        d.publish_event(
-            pubsub_name="jetstream-pubsub", 
-            topic_name="response.latent-diffusion", 
+          # to image
+          grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+          gridFilename = os.path.join(outpath, f'results.png')
+          Image.fromarray(grid.astype(np.uint8)).save(gridFilename)
+          client.fput_object("nightmarebot-output", f"{id}/results.png", gridFilename, content_type="image/png")
+          d.publish_event(
+              pubsub_name="jetstream-pubsub", 
+              topic_name="response.latent-diffusion", 
+              data=json.dumps({
+                  "id": data["id"], 
+                  "context": data["context"],
+                  "images": sample_filenames}),
+              data_content_type="application/json")
+  
+          req.complete_time = datetime.utcnow()
+          d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req)) 
+        except Exception as e:
+          d.publish_event(
+            pubsub_name="jetstream-pubsub",
+            topic_name="response.latent-diffusion",
             data=json.dumps({
-                "id": data["id"], 
+                "id": data["id"],
                 "context": data["context"],
-                "images": sample_filenames}),
+                "images": sample_filenames,
+                "error": str(e)}),
             data_content_type="application/json")
 
-        req.complete_time = datetime.utcnow()
-        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req)) 
-#        return InvokeMethodResponse(json.dumps(sample_filenames))
                     
 app.run(50052)
