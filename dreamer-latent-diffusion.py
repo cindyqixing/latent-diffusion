@@ -49,11 +49,11 @@ def generate(event: v1.Event) -> None:
     data = json.loads(event.Data())
     with DaprClient() as d:
         id = data["id"]
-        req = json.loads(d.get_state(store_name="cosmosdb", key=id).data)
-        if req == null or req["complete_time"]:
-          return
-        req["start_time"] = datetime.utcnow()
-        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
+#        req = json.loads(d.get_state(store_name="cosmosdb", key=id).data)
+#        if req == None or req["complete_time"]:
+#            return
+#        req["start_time"] = datetime.utcnow()
+#        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
         opt = SimpleNamespace(**data["input"])
         opt.outdir = os.path.join("/var/www/html/result/", id)
 
@@ -127,8 +127,9 @@ def generate(event: v1.Event) -> None:
                   "images": sample_filenames}),
               data_content_type="application/json")
   
-          req.complete_time = datetime.utcnow()
-          d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req)) 
+#          req.complete_time = datetime.utcnow()
+#          d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
+
         except Exception as e:
           d.publish_event(
             pubsub_name="jetstream-pubsub",
@@ -140,7 +141,5 @@ def generate(event: v1.Event) -> None:
                 "error": str(e)}),
             data_content_type="application/json")
 
-        req.complete_time = datetime.utcnow()
-        d.save_state(store_name="cosmosdb", key=id, value=json.dumps(req))
 
 app.run(50052)
