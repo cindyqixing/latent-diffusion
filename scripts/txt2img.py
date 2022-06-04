@@ -47,7 +47,14 @@ if __name__ == "__main__":
         nargs="?",
         help="dir to write results to",
         default="outputs/txt2img-samples"
-    )
+    ),
+    parser.add_argument(
+        "--grid_filename",
+        type=str,
+        nargs="?",
+        help="filename to write grid image to instead of prompt name",
+        default=None
+    ),
     parser.add_argument(
         "--ddim_steps",
         type=int,
@@ -160,6 +167,10 @@ if __name__ == "__main__":
 
     # to image
     grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-    Image.fromarray(grid.astype(np.uint8)).save(os.path.join(outpath, f'{prompt.replace(" ", "-")}.png'))
+    if opt.grid_filename:
+        grid_filename = opt.grid_filename
+    else:
+        grid_filename = f'{prompt.replace(" ", "-")}.png'
+    Image.fromarray(grid.astype(np.uint8)).save(os.path.join(outpath, grid_filename))
 
-    print(f"Your samples are ready and waiting four you here: \n{outpath} \nEnjoy.")
+    print(f"Your samples are ready and waiting for you here: \n{outpath} \nEnjoy.")
