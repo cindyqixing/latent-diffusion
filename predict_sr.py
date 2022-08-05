@@ -63,7 +63,10 @@ class Predictor(BasePredictor):
         custom_shape = None
         custom_steps = steps
 
-        c = Image.open(image)
+        c = Image.open(image).convert("RGBA")
+        # Remove alpha channel if present
+        bg = Image.new("RGBA", c.size, (255, 255, 255))
+        c = Image.alpha_composite(bg, c).convert("RGB")
         c = torch.unsqueeze(torchvision.transforms.ToTensor()(c), 0)
         c_up = torchvision.transforms.functional.resize(c, size=[up_f * c.shape[2], up_f * c.shape[3]], antialias=True)
         c_up = rearrange(c_up, "1 c h w -> 1 h w c")
@@ -124,14 +127,15 @@ class Predictor(BasePredictor):
                 make_progrow=make_progrow,
                 ddim_use_x0_pred=ddim_use_x0_pred,
             )
-            sample = logs["sample"]
-            sample = sample.detach().cpu()
-            sample = torch.clamp(sample, -1.0, 1.0)
-            sample = (sample + 1.0) / 2.0 * 255
-            sample = sample.numpy().astype(np.uint8)
-            sample = np.transpose(sample, (0, 2, 3, 1))
-            outfile = tempfile.mktemp(".png")
-            a = Image.fromarray(sample[0]).save(outfile)
+
+        sample = logs["sample"]
+        sample = sample.detach().cpu()
+        sample = torch.clamp(sample, -1.0, 1.0)
+        sample = (sample + 1.0) / 2.0 * 255
+        sample = sample.numpy().astype(np.uint8)
+        sample = np.transpose(sample, (0, 2, 3, 1))
+        outfile = tempfile.mktemp(".png")
+        a = Image.fromarray(sample[0]).save(outfile)
 
         return Path(outfile)
 
